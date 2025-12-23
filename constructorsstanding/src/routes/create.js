@@ -1,5 +1,5 @@
 import express from "express";
-import DriversStanding from "../schemas/driversstandingschema.js";
+import ConstructorsStanding from "../schemas/constructorsstandingschema.js";
 
 const router = express.Router();
 
@@ -9,9 +9,9 @@ router.post("/", async(req, res) => {
     //On regarde la saison de la course
     const raceSeason = raceResult.season;
     //Récupérer classement grâce à la saison
-    const driversstanding = await DriversStanding.findOne({ season: raceSeason });
+    const constructorsstanding = await ConstructorsStanding.findOne({ season: raceSeason });
     //Si il existe
-    if (driversstanding) {
+    if (constructorsstanding) {
       //Calcul des points
       const pointsByPosition = {
         1: 25,
@@ -28,41 +28,47 @@ router.post("/", async(req, res) => {
 
       raceResult.competitors.forEach((competitor) => {
         if (competitor.position <= 10) {
-          const currentDriver = driversstanding.competitors.find(
-            (c) => c.driverId === competitor.driverId
+          const currentConstructor = constructorsstanding.competitors.find(
+            (c) => c.constructorId === competitor.constructorId
           );
 
-          currentDriver.points += pointsByPosition[competitor.position];
+          currentConstructor.points += pointsByPosition[competitor.position];
 
           if (competitor.position === 1) {
-            currentDriver.winNumber += 1;
+            currentConstructor.winNumber += 1;
           }
         }
       });
 
       //Modifier le classement
-      driversstanding.competitors.sort((a, b) => b.points - a.points);
+      constructorsstanding.competitors.sort((a, b) => b.points - a.points);
 
-      driversstanding.competitors.forEach((competitor, index) => {
+      constructorsstanding.competitors.forEach((competitor, index) => {
         competitor.position = index + 1;
       });
 
-      await driversstanding.save();
+      await constructorsstanding.save();
 
-      return res.status(201).json(driversstanding);
+      return res.status(201).json(constructorsstanding);
     } else {
       //Création du classement
       const newCompetitors = [];
       raceResult.competitors.forEach((competitor) => {
-        newCompetitors.push({
-          driverId: competitor.driverId,
-          position: 1,
-          points: 0,
-          winNumber: 0,
-        });
+        const existConstructor = newCompetitors.find(
+          (c) => c.constructorId === competitor.constructorId
+        );
+
+        if (!existConstructor){
+          newCompetitors.push({
+            constructorId: competitor.constructorId,
+            position: 1,
+            points: 0,
+            winNumber: 0
+          });
+        };
       });
 
-      const newStanding = new DriversStanding({
+      const newStanding = new ConstructorsStanding({
         season: raceSeason,
         competitors: newCompetitors,
       });
@@ -83,14 +89,14 @@ router.post("/", async(req, res) => {
 
       raceResult.competitors.forEach((competitor) => {
         if (competitor.position <= 10) {
-          const currentDriver = newStanding.competitors.find(
-            (c) => c.driverId === competitor.driverId
+          const currentConstructor = newStanding.competitors.find(
+            (c) => c.constructorId === competitor.constructorId
           );
 
-          currentDriver.points += pointsByPosition[competitor.position];
+          currentConstructor.points += pointsByPosition[competitor.position];
 
           if (competitor.position === 1) {
-            currentDriver.winNumber += 1;
+            currentConstructor.winNumber += 1;
           }
         }
       });
@@ -100,11 +106,11 @@ router.post("/", async(req, res) => {
 
       newStanding.competitors.forEach((competitor, index) => {
         competitor.position = index + 1;
-      })
+      });
 
       //Création du classement
-      const createdDriversStanding = await DriversStanding.create(newStanding);
-      return res.status(201).json(createdDriversStanding);
+      const createdConstructorsStanding = await ConstructorsStanding.create(newStanding);
+      return res.status(201).json(createdConstructorsStanding);
     }
 });
 
