@@ -1,5 +1,8 @@
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { ddb } from "./db.dynamo.js";
+
+const snsClient = new SNSClient({ region: "eu-west-3" });
 
 export const handler = async (event) => {
   try {
@@ -14,6 +17,16 @@ export const handler = async (event) => {
         TableName: "races",
         Item: race,
         ConditionExpression: "attribute_not_exists(season)",
+      })
+    );
+    
+    await snsClient.send(
+      new PublishCommand({
+        TopicArn: process.env.RACE_TO_DRIVERS_STANDING_TOPIC_ARN,
+        Message: JSON.stringify({
+          eventType: "RACE_CREATED",
+          race: race,
+        }),
       })
     );
 

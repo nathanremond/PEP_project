@@ -3,7 +3,12 @@ import { ddb } from "./db.dynamo.js";
 
 export const handler = async (event) => {
   try {
-    const raceResult = event;
+    console.log("RAW EVENT:", JSON.stringify(event));
+
+    const snsMessage = JSON.parse(event.Records[0].Sns.Message);
+    const raceResult = snsMessage.race;
+
+    console.log("RACE RECEIVED:", raceResult);
     
     const raceSeason = raceResult.season;
    
