@@ -27,14 +27,14 @@ export class PepStack extends cdk.Stack {
 
     const refCircuitsTable = new dynamodb.Table(this, "PepRefCircuitsTable", {
       tableName: "pep-ref-circuits",
-      partitionKey: { name: "circuitRef", type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: "circuitId", type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     const refDriversTable = new dynamodb.Table(this, "PepRefDriversTable", {
       tableName: "pep-ref-drivers",
-      partitionKey: { name: "driverRef", type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: "driverId", type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -45,8 +45,8 @@ export class PepStack extends cdk.Stack {
       {
         tableName: "pep-ref-constructors",
         partitionKey: {
-          name: "constructorRef",
-          type: dynamodb.AttributeType.STRING,
+          name: "constructorId",
+          type: dynamodb.AttributeType.NUMBER,
         },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -61,10 +61,9 @@ export class PepStack extends cdk.Stack {
     });
 
     const racesTable = new dynamodb.Table(this, "PepRacesTable", {
-      // Nom distinct de l'ancienne pep-races (PK seule) pour permettre le remplacement CFN (PK+SK).
-      tableName: "pep-gp-races",
+      tableName: "pep-races",
       partitionKey: { name: "season", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "circuitRef", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "circuitId", type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });

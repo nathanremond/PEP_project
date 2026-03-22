@@ -35,6 +35,11 @@ async function scanAll(tableName) {
   return items;
 }
 
+function num(x) {
+  const n = Number(x);
+  return Number.isNaN(n) ? null : n;
+}
+
 export const handler = async (event) => {
   const method = event.requestContext?.http?.method;
   const path = event.rawPath || "";
@@ -47,13 +52,13 @@ export const handler = async (event) => {
   try {
     if (method === "GET" && path === "/circuits") {
       const items = await scanAll(circuitsTable);
-      items.sort((a, b) => String(a.circuitRef).localeCompare(String(b.circuitRef)));
+      items.sort((a, b) => Number(a.circuitId) - Number(b.circuitId));
       return json(200, { items });
     }
 
     if (method === "GET" && path === "/constructors") {
       const items = await scanAll(constructorsTable);
-      items.sort((a, b) => String(a.constructorRef).localeCompare(String(b.constructorRef)));
+      items.sort((a, b) => Number(a.constructorId) - Number(b.constructorId));
       return json(200, { items });
     }
 
@@ -84,25 +89,27 @@ export const handler = async (event) => {
 
     if (method === "POST" && path === "/seasons") {
       const body = parseBody(event);
-      if (!body?.season || !Array.isArray(body.driverRefs) || !Array.isArray(body.constructorRefs)) {
+      if (!body?.season || !Array.isArray(body.driverIds) || !Array.isArray(body.constructorIds)) {
         return json(400, {
           message:
-            "Body attendu: { season: string, driverRefs: string[], constructorRefs: string[] }",
+            "Body attendu: { season: string, driverIds: number[], constructorIds: number[] }",
         });
       }
 
       const season = String(body.season);
-      const driverRefs = [...new Set(body.driverRefs.map(String))];
-      const constructorRefs = [...new Set(body.constructorRefs.map(String))];
+      const driverIds = [...new Set(body.driverIds.map(num).filter((n) => n != null))];
+      const constructorIds = [
+        ...new Set(body.constructorIds.map(num).filter((n) => n != null)),
+      ];
 
-      if (driverRefs.length === 0 || constructorRefs.length === 0) {
+      if (driverIds.length === 0 || constructorIds.length === 0) {
         return json(400, {
-          message: "Au moins un pilote et un constructeur requis",
+          message: "Au moins un pilote et un constructeur (ids numeriques) requis",
         });
       }
 
-      const driverKeys = driverRefs.map((driverRef) => ({ driverRef }));
-      const consKeys = constructorRefs.map((constructorRef) => ({ constructorRef }));
+      const driverKeys = driverIds.map((driverId) => ({ driverId }));
+      const consKeys = constructorIds.map((constructorId) => ({ constructorId }));
 
       async function batchGetKeys(tableName, keys) {
         const out = [];
@@ -120,22 +127,21 @@ export const handler = async (event) => {
 
       const dItems = await batchGetKeys(driversTable, driverKeys);
       const cItems = await batchGetKeys(constructorsTable, consKeys);
-      if (dItems.length !== driverRefs.length) {
+      if (dItems.length !== driverIds.length) {
         return json(400, {
-          message: "Certains driverRefs sont invalides (voir CSV drivers.driverRef)",
+          message: "Certains driverIds sont invalides (voir GET /drivers)",
         });
       }
-      if (cItems.length !== constructorRefs.length) {
+      if (cItems.length !== constructorIds.length) {
         return json(400, {
-          message:
-            "Certains constructorRefs sont invalides (voir CSV constructors.constructorRef)",
+          message: "Certains constructorIds sont invalides (voir GET /constructors)",
         });
       }
 
       const item = {
         season,
-        driverRefs,
-        constructorRefs,
+        driverIds,
+        constructorIds,
         createdAt: new Date().toISOString(),
       };
 

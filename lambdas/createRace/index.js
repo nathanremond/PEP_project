@@ -1,4 +1,4 @@
-import { PutCommand, GetCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { ddb } from "./db.dynamo.js";
 
@@ -25,36 +25,9 @@ function jsonResponse(statusCode, obj) {
   };
 }
 
-function driverKey(c) {
-  return c.driverRef != null ? String(c.driverRef) : c.driverId != null ? String(c.driverId) : null;
-}
-
-function constructorKey(c) {
-  return c.constructorRef != null
-    ? String(c.constructorRef)
-    : c.constructorId != null
-      ? String(c.constructorId)
-      : null;
-}
-
-async function resolveCircuitRef(body, circuitsTable) {
-  if (body.circuitRef) return String(body.circuitRef);
-  if (body.circuitId == null) return null;
-  const id = Number(body.circuitId);
-  let startKey;
-  do {
-    const out = await ddb.send(
-      new ScanCommand({
-        TableName: circuitsTable,
-        ExclusiveStartKey: startKey,
-        FilterExpression: "circuitId = :id",
-        ExpressionAttributeValues: { ":id": id },
-      })
-    );
-    if (out.Items?.length) return String(out.Items[0].circuitRef);
-    startKey = out.LastEvaluatedKey;
-  } while (startKey);
-  return null;
+function num(x) {
+  const n = Number(x);
+  return Number.isNaN(n) ? null : n;
 }
 
 export const handler = async (event) => {
@@ -70,15 +43,14 @@ export const handler = async (event) => {
     if (!body?.season || !Array.isArray(body?.competitors)) {
       return jsonResponse(400, {
         message:
-          "Body JSON: { season, circuitRef ou circuitId, competitors: [{ driverRef, constructorRef, position }] }",
+          "Body JSON: { season, circuitId (nombre), competitors: [{ driverId, constructorId, position }] }",
       });
     }
 
-    const circuitRef = await resolveCircuitRef(body, circuitsTable);
-    if (!circuitRef) {
+    const circuitId = num(body.circuitId);
+    if (circuitId == null) {
       return jsonResponse(400, {
-        message:
-          "Circuit inconnu: indiquez circuitRef (ex. monaco) ou circuitId numerique du CSV",
+        message: "circuitId numerique requis (voir GET /circuits.circuitId)",
       });
     }
 
@@ -93,72 +65,76 @@ export const handler = async (event) => {
       });
     }
 
-    const seasonDriverRefs = new Set(seasonOut.Item.driverRefs ?? []);
-    const seasonConstructorRefs = new Set(seasonOut.Item.constructorRefs ?? []);
+    const seasonDriverIds = new Set(
+      (seasonOut.Item.driverIds ?? []).map((x) => Number(x))
+    );
+    const seasonConstructorIds = new Set(
+      (seasonOut.Item.constructorIds ?? []).map((x) => Number(x))
+    );
 
     const circuitOut = await ddb.send(
       new GetCommand({
         TableName: circuitsTable,
-        Key: { circuitRef },
+        Key: { circuitId },
       })
     );
     if (!circuitOut.Item) {
-      return jsonResponse(400, { message: "circuitRef absent des donnees de reference" });
+      return jsonResponse(400, {
+        message: "circuitId inconnu dans les donnees de reference",
+      });
     }
 
     const normalizedCompetitors = [];
     for (const comp of body.competitors) {
-      const dr = driverKey(comp);
-      const cr = constructorKey(comp);
-      const pos = Number(comp.position);
-      if (!dr || !cr || Number.isNaN(pos)) {
+      const driverId = num(comp.driverId);
+      const constructorId = num(comp.constructorId);
+      const pos = num(comp.position);
+      if (driverId == null || constructorId == null || pos == null) {
         return jsonResponse(400, {
-          message: "Chaque concurrent doit avoir driverRef, constructorRef, position",
+          message: "Chaque concurrent doit avoir driverId, constructorId, position (nombres)",
         });
       }
-      if (!seasonDriverRefs.has(dr)) {
+      if (!seasonDriverIds.has(driverId)) {
         return jsonResponse(400, {
-          message: `Pilote ${dr} non inscrit pour cette saison (POST /seasons)`,
+          message: `driverId ${driverId} non inscrit pour cette saison (POST /seasons)`,
         });
       }
-      if (!seasonConstructorRefs.has(cr)) {
+      if (!seasonConstructorIds.has(constructorId)) {
         return jsonResponse(400, {
-          message: `Constructeur ${cr} non inscrit pour cette saison`,
+          message: `constructorId ${constructorId} non inscrit pour cette saison`,
         });
       }
 
       const [dItem, cItem] = await Promise.all([
-        ddb.send(
-          new GetCommand({ TableName: driversTable, Key: { driverRef: dr } })
-        ),
+        ddb.send(new GetCommand({ TableName: driversTable, Key: { driverId } })),
         ddb.send(
           new GetCommand({
             TableName: constructorsTable,
-            Key: { constructorRef: cr },
+            Key: { constructorId },
           })
         ),
       ]);
       if (!dItem.Item) {
         return jsonResponse(400, {
-          message: `driverRef inconnu: ${dr} (voir GET /drivers)`,
+          message: `driverId inconnu: ${driverId} (voir GET /drivers)`,
         });
       }
       if (!cItem.Item) {
         return jsonResponse(400, {
-          message: `constructorRef inconnu: ${cr} (voir GET /constructors)`,
+          message: `constructorId inconnu: ${constructorId} (voir GET /constructors)`,
         });
       }
 
       normalizedCompetitors.push({
-        driverRef: dr,
-        constructorRef: cr,
+        driverId,
+        constructorId,
         position: pos,
       });
     }
 
     const race = {
       season,
-      circuitRef,
+      circuitId,
       competitors: normalizedCompetitors,
       createdAt: new Date().toISOString(),
     };
@@ -168,7 +144,7 @@ export const handler = async (event) => {
         TableName: racesTable,
         Item: race,
         ConditionExpression:
-          "attribute_not_exists(season) AND attribute_not_exists(circuitRef)",
+          "attribute_not_exists(season) AND attribute_not_exists(circuitId)",
       })
     );
 

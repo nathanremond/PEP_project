@@ -14,15 +14,21 @@ const pointsByPosition = {
   10: 1,
 };
 
+function constructorIdOf(c) {
+  const v = c.constructorId ?? c.constructorRef;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
 function uniqueConstructorsFromRace(competitors) {
   const seen = new Set();
   const list = [];
   for (const c of competitors || []) {
-    const id = c.constructorRef ?? c.constructorId;
-    if (id && !seen.has(id)) {
+    const id = constructorIdOf(c);
+    if (id != null && !seen.has(id)) {
       seen.add(id);
       list.push({
-        constructorRef: id,
+        constructorId: id,
         position: 1,
         points: 0,
         winNumber: 0,
@@ -37,9 +43,10 @@ function applyRacePoints(standingCompetitors, raceCompetitors) {
     if (competitor.position > 10) continue;
     const pts = pointsByPosition[competitor.position];
     if (pts == null) continue;
-    const cr = competitor.constructorRef ?? competitor.constructorId;
+    const cid = constructorIdOf(competitor);
+    if (cid == null) continue;
     const current = standingCompetitors.find(
-      (x) => (x.constructorRef ?? x.constructorId) === cr
+      (x) => constructorIdOf(x) === cid
     );
     if (!current) continue;
     current.points += pts;
@@ -95,7 +102,7 @@ export const handler = async (event) => {
       return {
         statusCode: 400,
         body: JSON.stringify({
-          message: "Aucun constructorRef dans les résultats de course",
+          message: "Aucun constructorId dans les resultats de course",
         }),
       };
     }

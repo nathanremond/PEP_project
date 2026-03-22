@@ -53,10 +53,10 @@ export const handler = async () => {
   const drivers = await loadCsv(bucket, "drivers.csv");
 
   const circuitItems = circuits
-    .filter((r) => r.circuitRef)
+    .filter((r) => r.circuitId != null && !Number.isNaN(Number(r.circuitId)))
     .map((r) => ({
-      circuitRef: String(r.circuitRef),
-      circuitId: r.circuitId != null ? Number(r.circuitId) : null,
+      circuitId: Number(r.circuitId),
+      slug: r.circuitRef != null ? String(r.circuitRef) : undefined,
       name: r.name,
       location: r.location,
       country: r.country,
@@ -67,20 +67,22 @@ export const handler = async () => {
     }));
 
   const constructorItems = constructors
-    .filter((r) => r.constructorRef)
+    .filter(
+      (r) => r.constructorId != null && !Number.isNaN(Number(r.constructorId))
+    )
     .map((r) => ({
-      constructorRef: String(r.constructorRef),
-      constructorId: r.constructorId != null ? Number(r.constructorId) : null,
+      constructorId: Number(r.constructorId),
+      slug: r.constructorRef != null ? String(r.constructorRef) : undefined,
       name: r.name,
       nationality: r.nationality,
       url: r.url,
     }));
 
   const driverItems = drivers
-    .filter((r) => r.driverRef)
+    .filter((r) => r.driverId != null && !Number.isNaN(Number(r.driverId)))
     .map((r) => ({
-      driverRef: String(r.driverRef),
-      driverId: r.driverId != null ? Number(r.driverId) : null,
+      driverId: Number(r.driverId),
+      slug: r.driverRef != null ? String(r.driverRef) : undefined,
       number: r.number,
       code: r.code,
       forename: r.forename,
