@@ -61,7 +61,8 @@ export class PepStack extends cdk.Stack {
     });
 
     const racesTable = new dynamodb.Table(this, "PepRacesTable", {
-      tableName: "pep-races",
+      // Nom distinct de l'ancienne pep-races (PK seule) pour permettre le remplacement CFN (PK+SK).
+      tableName: "pep-gp-races",
       partitionKey: { name: "season", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "circuitRef", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
