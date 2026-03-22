@@ -1,28 +1,180 @@
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand, GetCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { ddb } from "./db.dynamo.js";
 
-const snsClient = new SNSClient({ region: "eu-west-3" });
+const snsClient = new SNSClient({});
+
+function parsePayload(event) {
+  if (event.requestContext?.http) {
+    const raw = event.body;
+    if (!raw) return null;
+    try {
+      return typeof raw === "string" ? JSON.parse(raw) : raw;
+    } catch {
+      return null;
+    }
+  }
+  return event;
+}
+
+function jsonResponse(statusCode, obj) {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(obj),
+  };
+}
+
+function driverKey(c) {
+  return c.driverRef != null ? String(c.driverRef) : c.driverId != null ? String(c.driverId) : null;
+}
+
+function constructorKey(c) {
+  return c.constructorRef != null
+    ? String(c.constructorRef)
+    : c.constructorId != null
+      ? String(c.constructorId)
+      : null;
+}
+
+async function resolveCircuitRef(body, circuitsTable) {
+  if (body.circuitRef) return String(body.circuitRef);
+  if (body.circuitId == null) return null;
+  const id = Number(body.circuitId);
+  let startKey;
+  do {
+    const out = await ddb.send(
+      new ScanCommand({
+        TableName: circuitsTable,
+        ExclusiveStartKey: startKey,
+        FilterExpression: "circuitId = :id",
+        ExpressionAttributeValues: { ":id": id },
+      })
+    );
+    if (out.Items?.length) return String(out.Items[0].circuitRef);
+    startKey = out.LastEvaluatedKey;
+  } while (startKey);
+  return null;
+}
 
 export const handler = async (event) => {
+  const racesTable = process.env.RACES_TABLE;
+  const topicArn = process.env.RACE_EVENTS_TOPIC_ARN;
+  const seasonsTable = process.env.SEASONS_TABLE;
+  const circuitsTable = process.env.CIRCUITS_TABLE;
+  const driversTable = process.env.DRIVERS_TABLE;
+  const constructorsTable = process.env.CONSTRUCTORS_TABLE;
+
   try {
+    const body = parsePayload(event);
+    if (!body?.season || !Array.isArray(body?.competitors)) {
+      return jsonResponse(400, {
+        message:
+          "Body JSON: { season, circuitRef ou circuitId, competitors: [{ driverRef, constructorRef, position }] }",
+      });
+    }
+
+    const circuitRef = await resolveCircuitRef(body, circuitsTable);
+    if (!circuitRef) {
+      return jsonResponse(400, {
+        message:
+          "Circuit inconnu: indiquez circuitRef (ex. monaco) ou circuitId numerique du CSV",
+      });
+    }
+
+    const season = String(body.season);
+
+    const seasonOut = await ddb.send(
+      new GetCommand({ TableName: seasonsTable, Key: { season } })
+    );
+    if (!seasonOut.Item) {
+      return jsonResponse(400, {
+        message: "Saison inexistante: creez-la avec POST /seasons",
+      });
+    }
+
+    const seasonDriverRefs = new Set(seasonOut.Item.driverRefs ?? []);
+    const seasonConstructorRefs = new Set(seasonOut.Item.constructorRefs ?? []);
+
+    const circuitOut = await ddb.send(
+      new GetCommand({
+        TableName: circuitsTable,
+        Key: { circuitRef },
+      })
+    );
+    if (!circuitOut.Item) {
+      return jsonResponse(400, { message: "circuitRef absent des donnees de reference" });
+    }
+
+    const normalizedCompetitors = [];
+    for (const comp of body.competitors) {
+      const dr = driverKey(comp);
+      const cr = constructorKey(comp);
+      const pos = Number(comp.position);
+      if (!dr || !cr || Number.isNaN(pos)) {
+        return jsonResponse(400, {
+          message: "Chaque concurrent doit avoir driverRef, constructorRef, position",
+        });
+      }
+      if (!seasonDriverRefs.has(dr)) {
+        return jsonResponse(400, {
+          message: `Pilote ${dr} non inscrit pour cette saison (POST /seasons)`,
+        });
+      }
+      if (!seasonConstructorRefs.has(cr)) {
+        return jsonResponse(400, {
+          message: `Constructeur ${cr} non inscrit pour cette saison`,
+        });
+      }
+
+      const [dItem, cItem] = await Promise.all([
+        ddb.send(
+          new GetCommand({ TableName: driversTable, Key: { driverRef: dr } })
+        ),
+        ddb.send(
+          new GetCommand({
+            TableName: constructorsTable,
+            Key: { constructorRef: cr },
+          })
+        ),
+      ]);
+      if (!dItem.Item) {
+        return jsonResponse(400, {
+          message: `driverRef inconnu: ${dr} (voir GET /drivers)`,
+        });
+      }
+      if (!cItem.Item) {
+        return jsonResponse(400, {
+          message: `constructorRef inconnu: ${cr} (voir GET /constructors)`,
+        });
+      }
+
+      normalizedCompetitors.push({
+        driverRef: dr,
+        constructorRef: cr,
+        position: pos,
+      });
+    }
+
     const race = {
-        circuitId: event.circuitId,
-        season: event.season,
-        competitors: event.competitors,
+      season,
+      circuitRef,
+      competitors: normalizedCompetitors,
+      createdAt: new Date().toISOString(),
     };
 
     await ddb.send(
       new PutCommand({
-        TableName: "races",
+        TableName: racesTable,
         Item: race,
-        ConditionExpression: "attribute_not_exists(season)",
+        ConditionExpression:
+          "attribute_not_exists(season) AND attribute_not_exists(circuitRef)",
       })
     );
-    
+
     await snsClient.send(
       new PublishCommand({
-        TopicArn: process.env.RACE_TO_DRIVERS_STANDING_TOPIC_ARN,
+        TopicArn: topicArn,
         Message: JSON.stringify({
           eventType: "RACE_CREATED",
           race: race,
@@ -30,23 +182,19 @@ export const handler = async (event) => {
       })
     );
 
-    return {
-      statusCode: 201,
-      body: JSON.stringify({
-        message: "Race created successfully",
-        race: race
-      }),
-    };
+    return jsonResponse(201, {
+      message: "Course enregistree, evenement SNS publie",
+      race,
+    });
   } catch (error) {
-
-    return {
-      statusCode: error.name === "ConditionalCheckFailedException" ? 409 : 500,
-      body: JSON.stringify({
+    return jsonResponse(
+      error.name === "ConditionalCheckFailedException" ? 409 : 500,
+      {
         message:
           error.name === "ConditionalCheckFailedException"
-            ? "Race already exists"
+            ? "Une course existe deja pour cette saison sur ce circuit"
             : error.message,
-      }),
-    };
+      }
+    );
   }
 };

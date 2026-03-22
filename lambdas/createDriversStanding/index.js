@@ -2,6 +2,8 @@ import { PutCommand, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ddb } from "./db.dynamo.js";
 
 export const handler = async (event) => {
+  const tableName = process.env.DRIVERS_STANDINGS_TABLE;
+
   try {
     console.log("RAW EVENT:", JSON.stringify(event));
 
@@ -13,7 +15,7 @@ export const handler = async (event) => {
     const raceSeason = raceResult.season;
    
     const params = {
-      TableName: "driversstandings",
+      TableName: tableName,
       Key: {
         season: raceSeason,
       },
@@ -41,9 +43,12 @@ export const handler = async (event) => {
 
       raceResult.competitors.forEach((competitor) => {
         if (competitor.position <= 10) {
+          const dr =
+            competitor.driverRef ?? competitor.driverId;
           const currentDriver = driversstanding.competitors.find(
-            (c) => c.driverId === competitor.driverId
+            (c) => (c.driverRef ?? c.driverId) === dr
           );
+          if (!currentDriver) return;
 
           currentDriver.points += pointsByPosition[competitor.position];
 
@@ -62,7 +67,7 @@ export const handler = async (event) => {
 
       await ddb.send(
         new UpdateCommand({
-          TableName: "driversstandings",
+          TableName: tableName,
           Key: {
             season: driversstanding.season,
           },
@@ -87,8 +92,9 @@ export const handler = async (event) => {
       //Création du classement
       const newCompetitors = [];
       raceResult.competitors.forEach((competitor) => {
+        const dr = competitor.driverRef ?? competitor.driverId;
         newCompetitors.push({
-          driverId: competitor.driverId,
+          driverRef: dr,
           position: 1,
           points: 0,
           winNumber: 0,
@@ -116,9 +122,11 @@ export const handler = async (event) => {
 
       raceResult.competitors.forEach((competitor) => {
         if (competitor.position <= 10) {
+          const dr = competitor.driverRef ?? competitor.driverId;
           const currentDriver = newStanding.competitors.find(
-            (c) => c.driverId === competitor.driverId
+            (c) => (c.driverRef ?? c.driverId) === dr
           );
+          if (!currentDriver) return;
 
           currentDriver.points += pointsByPosition[competitor.position];
 
@@ -138,7 +146,7 @@ export const handler = async (event) => {
       //Création du classement
       await ddb.send(
         new PutCommand({
-          TableName: "driversstandings",
+          TableName: tableName,
           Item: newStanding,
           ConditionExpression: "attribute_not_exists(season)",
         })
