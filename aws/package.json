@@ -1,5 +1,5 @@
 {
-  "name": "pep-infra",
+  "name": "pep-aws-cdk",
   "version": "1.0.0",
   "private": true,
   "scripts": {

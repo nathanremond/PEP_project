@@ -64,7 +64,7 @@ export class PepPipelineStack extends cdk.Stack {
           },
           build: {
             commands: [
-              "cd infra",
+              "cd aws",
               "npm ci",
               "npx cdk deploy PepF1Stack --require-approval never",
             ],
