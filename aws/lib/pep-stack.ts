@@ -26,14 +26,15 @@ export class PepStack extends cdk.Stack {
     super(scope, id, props);
 
     const refCircuitsTable = new dynamodb.Table(this, "PepRefCircuitsTable", {
-      tableName: "pep-ref-circuits",
+      // Nom sans "ref" : donnees maitres CSV. Renommer permet le remplacement CFN (changement de cle).
+      tableName: "pep-circuits",
       partitionKey: { name: "circuitId", type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     const refDriversTable = new dynamodb.Table(this, "PepRefDriversTable", {
-      tableName: "pep-ref-drivers",
+      tableName: "pep-drivers",
       partitionKey: { name: "driverId", type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -43,7 +44,7 @@ export class PepStack extends cdk.Stack {
       this,
       "PepRefConstructorsTable",
       {
-        tableName: "pep-ref-constructors",
+        tableName: "pep-constructors",
         partitionKey: {
           name: "constructorId",
           type: dynamodb.AttributeType.NUMBER,
