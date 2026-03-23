@@ -154,12 +154,18 @@ export class PepStack extends cdk.Stack {
         DRIVERS_TABLE: refDriversTable.tableName,
         CONSTRUCTORS_TABLE: refConstructorsTable.tableName,
         SEASONS_TABLE: seasonsTable.tableName,
+        RACES_TABLE: racesTable.tableName,
+        DRIVERS_STANDINGS_TABLE: driversStandingsTable.tableName,
+        CONSTRUCTORS_STANDINGS_TABLE: constructorsStandingsTable.tableName,
       },
     });
     refCircuitsTable.grantReadData(catalogFn);
     refDriversTable.grantReadData(catalogFn);
     refConstructorsTable.grantReadData(catalogFn);
     seasonsTable.grantReadWriteData(catalogFn);
+    racesTable.grantReadData(catalogFn);
+    driversStandingsTable.grantReadData(catalogFn);
+    constructorsStandingsTable.grantReadData(catalogFn);
 
     const createRaceFn = new lambda_nodejs.NodejsFunction(this, "PepCreateRaceFn", {
       functionName: "pep-create-race",
@@ -275,11 +281,53 @@ export class PepStack extends cdk.Stack {
 
     httpApi.addRoutes({
       path: "/races",
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: "/races",
       methods: [apigwv2.HttpMethod.POST],
       integration: new HttpLambdaIntegration(
         "PepCreateRaceIntegration",
         createRaceFn
       ),
+    });
+
+    httpApi.addRoutes({
+      path: "/races/{season}/{circuitId}",
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: "/driversstandings/{season}",
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: "/constructorsstandings/{season}",
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: "/races/{season}/{circuitId}",
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: "/driversstandings/{season}",
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: "/constructorsstandings/{season}",
+      methods: [apigwv2.HttpMethod.GET],
+      integration: catalogIntegration,
     });
 
     new cdk.CfnOutput(this, "PepHttpApiUrl", {

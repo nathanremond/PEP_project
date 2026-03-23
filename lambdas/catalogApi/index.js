@@ -48,6 +48,9 @@ export const handler = async (event) => {
   const constructorsTable = process.env.CONSTRUCTORS_TABLE;
   const driversTable = process.env.DRIVERS_TABLE;
   const seasonsTable = process.env.SEASONS_TABLE;
+  const racesTable = process.env.RACES_TABLE;
+  const driversStandingsTable = process.env.DRIVERS_STANDINGS_TABLE;
+  const constructorsStandingsTable = process.env.CONSTRUCTORS_STANDINGS_TABLE;
 
   try {
     if (method === "GET" && path === "/circuits") {
@@ -154,6 +157,55 @@ export const handler = async (event) => {
       );
 
       return json(201, { message: "Saison creee", season: item });
+    }
+
+    if (method === "GET" && path === "/races") {
+      const items = await scanAll(racesTable);
+      items.sort((a, b) => String(b.season).localeCompare(String(a.season)));
+      return json(200, { items });
+    }
+
+    const racesDetailMatch = path.match(/^\/races\/([^/]+)\/([^/]+)$/);
+    if (method === "GET" && racesDetailMatch) {
+      const season = decodeURIComponent(racesDetailMatch[1]);
+      const circuitId = num(racesDetailMatch[2]);
+      if (circuitId == null) {
+        return json(400, { message: "circuitId doit etre un nombre" });
+      }
+      const out = await ddb.send(
+        new GetCommand({
+          TableName: racesTable,
+          Key: { season, circuitId },
+        })
+      );
+      if (!out.Item) return json(404, { message: "Course introuvable" });
+      return json(200, out.Item);
+    }
+
+    const driversStandingsMatch = path.match(/^\/driversstandings\/([^/]+)$/);
+    if (method === "GET" && driversStandingsMatch) {
+      const season = decodeURIComponent(driversStandingsMatch[1]);
+      const out = await ddb.send(
+        new GetCommand({
+          TableName: driversStandingsTable,
+          Key: { season },
+        })
+      );
+      if (!out.Item) return json(404, { message: "Classement pilotes introuvable" });
+      return json(200, out.Item);
+    }
+
+    const constructorsStandingsMatch = path.match(/^\/constructorsstandings\/([^/]+)$/);
+    if (method === "GET" && constructorsStandingsMatch) {
+      const season = decodeURIComponent(constructorsStandingsMatch[1]);
+      const out = await ddb.send(
+        new GetCommand({
+          TableName: constructorsStandingsTable,
+          Key: { season },
+        })
+      );
+      if (!out.Item) return json(404, { message: "Classement constructeurs introuvable" });
+      return json(200, out.Item);
     }
 
     return json(404, { message: "Route inconnue" });
