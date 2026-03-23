@@ -312,18 +312,6 @@ export class PepStack extends cdk.Stack {
       integration: catalogIntegration,
     });
 
-    httpApi.addRoutes({
-      path: "/driversstandings/{season}",
-      methods: [apigwv2.HttpMethod.GET],
-      integration: catalogIntegration,
-    });
-
-    httpApi.addRoutes({
-      path: "/constructorsstandings/{season}",
-      methods: [apigwv2.HttpMethod.GET],
-      integration: catalogIntegration,
-    });
-
     new cdk.CfnOutput(this, "PepHttpApiUrl", {
       description: "Base URL API",
       value: httpApi.url ?? "",
