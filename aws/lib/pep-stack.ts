@@ -313,12 +313,6 @@ export class PepStack extends cdk.Stack {
     });
 
     httpApi.addRoutes({
-      path: "/races/{season}/{circuitId}",
-      methods: [apigwv2.HttpMethod.GET],
-      integration: catalogIntegration,
-    });
-
-    httpApi.addRoutes({
       path: "/driversstandings/{season}",
       methods: [apigwv2.HttpMethod.GET],
       integration: catalogIntegration,
